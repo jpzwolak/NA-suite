@@ -9,3 +9,15 @@ Presently the code allows for simple analysis of the basic network topology meas
 Any questions or concerns regarding the provided code and requests for additional fetures should be addressed to me at jpzwolak {at} gmail {.} com
 
 Enjoy!
+
+## File structure
+
+`Tools` - this folder contains tools that should make your life easier!
+
+- `SNA Survey (example).pdf`: an example of an in-class, pen-and-paper social network survey that we designed to collect the netwokr data for our study.
+
+- `Data-coder.xlsx`: a Microsoft Excel spreadsheet that I designed to simplify the coding process. The sheets in this docuemnt are interdependent and therefore some of them are locked to prevent unintentional modification. Note that this docuemnt was designed for our survey - to be used with different surveys it needs to be modified or re-designed, whichever is easier.
+
+	- `Names`: use this sheet to establish a dictionary that will be used in the coding proces. For instance, when coding the pen-and-paper surveys I used two-digit identifiers instead of the 7-digit student IDs to avoid errors and to expedite the process.
+	- `Summary`: this sheet is used as a "self-check". From the `Names` tab, the student IDs should be pasted to the `ID` column. 
+	- `SNAt1`: this sheet should be used to code the data. Once the two-digit identifiers are in the respective columns (i.e., `Source` or `Target`), the names of students will be retrived from the `Names` sheet (this can be used as a check to make sure the coding is done correctly). To make sure that the weights are coded correctly, the `Summary` sheet can be used. In particular, for a given studetn the number of peers listed under the "weight 1", "weight 2" and "weight 3" category needs to be put in from the survey. If all weights were coded correctly, the cell `M1` (`V1`, etc.) will have value `0`. If the value is non-zero, columns `N`- `R` (`W`-`AA`, etc.) will point to the studetnt with misscoded edges.   
