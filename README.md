@@ -12,6 +12,8 @@ Enjoy!
 
 ## File structure
 
+`Data` - this folder contains a sample edge lists (in the `Edge lists` subfolder) and nodes data. These are fake data intended only for creating dummy example networks.
+
 `Tools` - this folder contains tools that should make your life easier!
 
 - `SNA Survey (example).pdf`: an example of an in-class, pen-and-paper social network survey that we designed to collect the network data for our study.
