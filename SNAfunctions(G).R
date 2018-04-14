@@ -1,5 +1,6 @@
 library("igraph")
- 
+library("tnet")
+
 #-- creating folders where matrices and plots will be stored ----
 if (!file.exists("Plots")){dir.create("Plots")}
  
