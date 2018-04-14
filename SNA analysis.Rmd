@@ -1,0 +1,202 @@
+---
+title: "SNA toolbox: an introduction"
+author: "Justyna P. Zwolak"
+date: "April 11, 2018"
+output: pdf_document
+---
+
+# Introduction #
+
+This document is intended as an introductory guide to SNA analysis. As such, it does not present or discuss any statistical analysis and modeling that would use the calculated network measures. It only shows how to calculate various network metrics and how to visualize social networks. In order to conduct a network analysis one need in addition to this file a data set, i.e., at least one file with edge lists; a file with information about the nodes and the `SNAfunctions(G).R`, where all functions handling the work behind the scenes are defined.
+
+Before starting the analysis, make sure that the file structure on your computer is compatible with the code in this document. In particular, this code assumes that the `SNA analysis.Rmd` file is in the same folder as the `SNAfunctions(G).R` file and the `Data` folder. The data structure should be as follows:
+
+```
+main
+|- SNA analysis.Rmd
+|- SNAfunctions(G).R
+|- Data
+    |- Edge_lists
+        |- s1c1-A.csv
+        |- s1c1-B.csv
+        |- ...
+    |- Nodes.csv
+```
+
+where the `s1c1-A.csv`, `s1c1-B.csv`, etc., are the csv files with edge list from different collections.
+
+Now, once the file structure is set, I will set the current working directory to make the path operations easier. I will also initiate packages that I will be using throughout the analysis.
+```{r initiating_packages, echo=FALSE}
+setwd("/Users/jpz1/Research/Projects/PER/SNA-toolbox")
+source("SNAfunctions(G).R")
+```
+
+I start by creating a data frame with the nodes' information to summarize the data. 
+```{r reading_data, eval=TRUE}
+my.data <- read.csv("Data/Nodes.csv", header = TRUE, na.strings = c("NA", "", "#N/A"))
+colnames(my.data)
+```
+
+As can be seen, my data frame contains information about the Ids (two-digit identifiers), status (one of five possible levels: ST/LA/TA/INS/Other, where "Other" was assigned to individuals who did not appear on the initial roster), gender (M/F), ethnic group, academic plan, section in the fall semester, section (if any) in the spring semester and final grade. Here are some numbers to summarize the data. Out of the `r sum(my.data$Status == "ST")` students who took the fall section of the course the total of `r sum(my.data$Sec.S %in% c("A", "B") & my.data$Status == "ST", na.rm = TRUE)` took the consecutive course in the spring.
+```{r data_comparison, eval=TRUE}
+sum(my.data$Status == "ST")
+sum(my.data$Sec.S %in% c("A", "B") & my.data$Status == "ST", na.rm = TRUE)
+```
+
+The enrollment and staff in numbers are presented below:
+```{r enrollment_by_section, eval=TRUE}
+table(my.data$Sec.F, my.data$Status)
+```
+
+To use in the analysis the network metrics one needs to create a data frame containing all the in- and out-of-class centralities for both sections. However, before doing any combined analysis on both section I need to get a sense for whether the two sections are similar enough so that it makes sense to aggregate them for analysis. To do so, I will compare basic network descriptive. 
+
+# The in-class networks: comparison between sections #
+
+Response rates for all surveys for both sections:
+```{r ic_response_rates, eval = TRUE}
+resp.rate = c(97, 86, 78, 81, 77, 96, 84, 89, 80, 86)
+section = c(rep("A", 5), rep("B", 5))
+resp.rate.all = data.frame(resp.rate, section)
+
+data.frame(id = c("A_mean", "A_sd", "B_mean", "B_sd"),
+           values = c(mean(resp.rate[1:5]), sd(resp.rate[1:5]),
+                      mean(resp.rate[6:10]), sd(resp.rate[6:10])))
+
+kruskal.test(resp.rate ~ section, data = resp.rate.all)
+```
+
+Kruskal-Wallis shows no statistically significant differences in response rates between the two sections. 
+
+Now I want to compare the two groups in terms of  student demographic information. I start with gender.
+```{r population, eval = TRUE}
+gender = xtabs(~ Sec.F + Gender, data=my.data[my.data$Status=="ST",])
+gender
+chisq.test(gender)
+```
+
+Now I look the the ethnicity distributions.
+```{r ethnicity, eval = TRUE}
+demog = xtabs(~ Sec.F + Ethnic.Grp, data=my.data[my.data$Status=="ST",])
+demog
+fisher.test(demog)
+```
+
+And finally at the major.
+```{r major, eval = TRUE}
+major = xtabs(~ Sec.F + Acad.Plan, data=my.data[my.data$Status=="ST",])
+major
+fisher.test(major)
+```
+
+
+# The in-class networks: network comparison #
+
+I start by reading the data from both sections:
+```{r reading_network_data, eval = TRUE}
+files.list <- list.files("Data/Edge_lists", full.names = TRUE)
+nodes <- read.csv("Data/Nodes.csv", header = TRUE, na.strings = c("NA", ""),
+                  stringsAsFactors = FALSE)
+sna.data <- read.csv("Data/Nodes.csv", header = TRUE,
+                        na.strings = c("NA", "", "#N/A"))
+
+```
+
+Rather than analyzing each network separately, I will create a list of graph lists for each section. Working with lists will help to limit the number of the repeated code.
+```{r generating_graphs_RG, eval = TRUE}
+dat.A <- reading.graph(1) 
+dat.B <- reading.graph(2)
+dat.A
+```
+
+Now I will generate lists of graphs with only relevant nodes. In particular, presently each network includes all the nodes that were coded as "Other" (i.e., individuals who were not on the roster but appeared on the survey). I use the `remove.disconnected` function to remove all disconnected "Others" nodes from my networks while keeping the disconnected students in it. Note that this operation does not affect the numbers of edges.
+```{r removing_others, eval = TRUE}
+dat.A.rel <-lapply(dat.A, remove.disconnected)
+dat.B.rel <-lapply(dat.B, remove.disconnected)
+dat.A.rel
+```
+
+In a similar way I can remove all instructional staff using the `remove.instr` function. Note that now both the number of nodes and the number of edges has changed.
+```{r removing_instructors, eval = TRUE}
+dat.A.st <-lapply(dat.A.rel, remove.instr)
+dat.B.st <-lapply(dat.B.rel, remove.instr)
+dat.A.st
+```
+
+## Density ##
+
+Graph density is a measure of how well connected the network is as a whole. It is calculated as the portion of the potential connections in a network that are actual connections. For a directed network, density is defined as:
+$$
+\Delta=\frac{\ell}{n(n-1)},
+$$
+where $\ell$ is the number of all ties in the network and $n$ is the number of nodes in the network. Density takes values between $0$ (network without ties) and $1$ (fully connected network).
+
+In my analysis, I use the standard `graph.density` function from `igraph` package and, by default, a binary version of ties. Also, unless otherwise stated, I use the network with removed disconnected "Others" but I keep the instructional staff.
+```{r ic_density, eval = TRUE}
+data.frame(Id = c("SNA1", "SNA2", "SNA3", "SNA4", "SNA5"),
+           F15A = round(sapply(dat.A.rel, graph.density, loops=FALSE), 3),
+           F15B = round(sapply(dat.B.rel, graph.density, loops=FALSE), 3))
+```
+
+## Diameter ##
+
+Diameter is the length of the longest path between two nodes, where path is defined as a sequence of edges connecting a sequence of distinct nodes. It provides information about the span of a network. The standard version of the `diameter` function from the `igraph` package allows to calculate the weighted diameter of a network. Note, that by default in `igraph` weights are treated as a cost rather than an advantage, i.e., it is three times as hard to get to a node via an edge of weight $3$ than via an edge of weight $1$. Since the weight from our survey have the opposite meaning, the numbers need to be inverted for calculating weighted diameter. To do so, we will use the `mod.diameter` function. To use the binary edges one has to set the `weights` argument to `NA`. For comparison, I calculate the weighted (`X.wgt`) diameter, the diameter with inverted weight (`X.inv.wgt`) and the binary version (`X.flat`). 
+```{r ic_diameter, eval = TRUE}
+data.frame(Id = c("SNA1", "SNA2", "SNA3", "SNA4", "SNA5"),
+           A.wgt = sapply(dat.A.rel, diameter),
+           B.wgt = sapply(dat.B.rel, diameter),
+           A.inv.wgt = round(sapply(dat.A.rel, mod.diameter), 1),
+           B.inv.wgt = round(sapply(dat.B.rel, mod.diameter), 1),
+           A.flat = sapply(dat.A.rel, diameter, weights = NA),
+           B.flat = sapply(dat.B.rel, diameter, weights = NA))
+```
+
+
+## Average path length ##
+
+The average path length (APL) is the shortest path between two nodes, averaged over all pairs of nodes. It is an indicator of how close together nodes are to one another. I calculate the average path length using the standard `mean_distance` from `igraph`. Note that in this approach the weights are ignored by default. For comparison, I calculate the APL for networks with (`X.all`) and without (`X.st`) instructors. 
+```{r in_apl, eval = TRUE}
+data.frame(Id = c("SNA1", "SNA2", "SNA3", "SNA4", "SNA5"),
+           A.all = round(sapply(dat.A.rel, mean_distance), 1),
+           B.all = round(sapply(dat.B.rel, mean_distance), 1),
+           A.st = round(sapply(dat.A.st, mean_distance), 1),
+           B.st = round(sapply(dat.B.st, mean_distance), 1))
+```
+
+
+## Reciprocity ##
+
+Reciprocity is a tendency of pairs of nodes to form mutual connections between each other. In network science, reciprocity is a measure of the likelihood of vertices in a directed network to be mutually linked. It is calculated for unweighted graphs as:
+directed network, density is defined as:
+$$
+\rho=\frac{\ell^{\leftrightarrow}}{\ell},
+$$
+where $\ell^{\leftrightarrow}$ is the number of mutual edges  $\ell$ is the number of all edges in the network. Like density, reciprocity takes values between $0$ (non of the ties is returned) and $1$ (all tied are mutual). I use the standard `reciprocity` function from the `igraph` package. For comparison I present networks without (`X.st`) and with (`X.all`) instructors. Since instructors did not take the survey but were names by many students, values in the latter are about $20\%$-$35\%$ lower. 
+```{r reciprocity, eval = TRUE}
+a <- data.frame(Id = c("SNA1", "SNA2", "SNA3", "SNA4", "SNA5"),
+           A.st = round(sapply(dat.A.st, reciprocity), 2),
+           B.st = round(sapply(dat.B.st, reciprocity), 2),
+           A.all = round(sapply(dat.A.rel, reciprocity), 2),
+           B.all = round(sapply(dat.B.rel, reciprocity), 2))
+```
+
+
+## Transitivity ##
+
+Transitivity refers to the extent to which the relation between two nodes is transitive, i.e., two connected nodes have a common neighbor (“a friend of my friend is also my friend”). For transitivity, I use the `clustering_w()` function from package `tnet` as it allows more flexibility when deciding how to deal with weighted ties. In particular, my networks are directed and weighted and I want to compare the transitivity when the weights are treated as binary (`"bi"` method) and with the arithmetic mean to control the switch off directed ties into undirected (`"am"` method). Other options for switching off the directionality of ties are: `"gm"` for the geometric mean, `"mi"` for the minimum method and `"ma"` for the maximum method. Function graph `graph.tnet` converts the `igraph` objects into a format compatible with `tnet` package.
+```{r in_transitivity, eval = TRUE}
+tr = data.frame(Id = c("SNA1", "SNA2", "SNA3", "SNA4", "SNA5"),
+           A.bi = round(sapply(graph.tnet(dat.A.rel), clustering_w, measure = "bi"), 2),
+           A.am = round(sapply(graph.tnet(dat.A.rel), clustering_w, measure = "am"), 2),
+           B.bi = round(sapply(graph.tnet(dat.B.rel), clustering_w, measure = "bi"), 2),
+           B.am = round(sapply(graph.tnet(dat.B.rel), clustering_w, measure = "am"), 2))
+tr
+```
+
+If the ratio between the weighted clustering coefficient (weighted transitivity) and the binary coefficient is higher than 1, it can be argued that triplets made up by strong ties are more likely to be closed than triplets made up by weak ties. On the contrary, it can be argued that triplets made of by weak ties are more likely to be closed than those made up by strong ties if the ratio is less than 1. In our case:
+```{r in_clust_comp, eval = TRUE}
+data.frame(Id =  c("SNA1", "SNA2", "SNA3", "SNA4", "SNA5"),
+           A = round(tr$A.am/tr$A.bi, 3),
+           B = round(tr$B.am/tr$B.bi, 3))
+```
+
+
