@@ -98,8 +98,18 @@ check_incidence_matrix <- function(inc.mat, a.count, d.count, n.count, q.count,
     for(i in 1:nrow(inc.mat)){
       if(rownames(inc.mat)[i] != paste0(q.names[q],r.selections[r])){
         rnames <- rownames(inc.mat)
-        rnames <- append(rnames, paste0(q.names[q],r.selections[r]), after=i-1)
-        inc.mat <- rbind(inc.mat[1:i,], rep(0, ncol(inc.mat)), inc.mat[-(1:i),])
+        if(i == 1){
+          rnames <- c(paste0(q.names[q],r.selections[r]), rnames)
+          inc.mat <- rbind(rep(0, ncol(inc.mat)), inc.mat)
+        } else{
+          rnames <- append(rnames, paste0(q.names[q],r.selections[r]), after=i-1)
+          inc.mat <- rbind(inc.mat[1:i-1,], rep(0, ncol(inc.mat)), inc.mat[-(1:i-1),])
+        }
+        ####
+        # print(i)
+        # print(rnames)
+        # print(rownames(inc.mat))
+        ####
         rownames(inc.mat) <- rnames
         break
       }
@@ -160,13 +170,13 @@ collapse_response_matrix <- function(adj.mat, a.count, d.count, n.count,
     print("Enter the correct range for a.count (1-3), d.count (1-3), and n.count (0-1).")
     return()
   }
-  if(!is.na(q.names) & length(q.names) != q.count){
+  if(all(!is.na(q.names)) & length(q.names) != q.count){
     print("Length of question name vector must be the same as the q.count")
     return()
   }
   
   Q.mat <- matrix(0, q.count, q.count)
-  if(!is.na(q.names)){
+  if(all(!is.na(q.names))){
     colnames(Q.mat) <- q.names
     rownames(Q.mat) <- q.names
   }
@@ -214,18 +224,58 @@ item_network_backbone <- function(q.mat, c.mat, alpha){
     cdf.i <- P_lans[i,]
     p_a <- quantile(cdf.i, 1 - alpha)
     for(j in 1:nrow(P_lans)){
-      if(P_lans[i,j] >= p_a){
+      if(P_lans[i,j] > p_a){
         A_lans[i,j] <- q.mat[i,j]
         A_lans[j,i] <- q.mat[i,j]
         if(A_lans[i,j] > 0){
           C_lans[i,j] <- c.mat[i,j]
+          # Adding change to indicate 0 temperature
+          if(c.mat[i,j]==0){
+            print("checkA")
+            C_lans[i,j] <- "X"
+          }
         }else{
-          C_lans[i,j] <- 0
+          C_lans[i,j] <- "X"
         }
         if(A_lans[j,i] > 0){
-         C_lans[j,i] <- c.mat[i,j]
+          C_lans[j,i] <- c.mat[i,j]
+          # Adding change to indicate 0 temperature
+          if(c.mat[i,j]==0){
+            print("checkB")
+            C_lans[j,i] <- "X"
+          }
         }else{
-          C_lans[j,i] <- 0
+          C_lans[j,i] <- "X"
+        }
+      }
+    }
+    if(rowSums(A_lans)[i] == 0){
+      max_a <- max(P_lans[i,])
+      #print(max_a)
+      for(j in 1:nrow(P_lans)){
+        if(P_lans[i,j] == max_a){
+          A_lans[i,j] <- q.mat[i,j]
+          A_lans[j,i] <- q.mat[i,j]
+          if(A_lans[i,j] > 0){
+            C_lans[i,j] <- c.mat[i,j]
+            # Adding change to indicate 0 temperature
+            if(c.mat[i,j]==0){
+              print("checkC")
+              C_lans[i,j] <- "X"
+            }
+          }else{
+            C_lans[i,j] <- "X"
+          }
+          if(A_lans[j,i] > 0){
+            C_lans[j,i] <- c.mat[i,j]
+            # Adding change to indicate 0 temperature
+            if(c.mat[i,j]==0){
+              print("checkD")
+              C_lans[j,i] <- "X"
+            }
+          }else{
+            C_lans[j,i] <- "X"
+          }
         }
       }
     }
@@ -252,6 +302,7 @@ generate_two_mode_weighted_network <- function(q.mat, c.mat, mode = "graph"){
   
   df <- get.data.frame(g) %>%
     mutate(color = E(g)$color)
+  print(df)
   
   if(mode == "graph"){
     return(g)
@@ -283,11 +334,11 @@ generate_two_mode_weighted_network <- function(q.mat, c.mat, mode = "graph"){
 #   (a) "edgelist": dataframe containing edgelist with weight and color
 #   (b) "graph" igraph object with edge weight as similarity and edge color as agree/disagree ratio
 create_survey_item_network <- function(df, a.count, d.count, n.count,
-                                       q.count, q.names, r.selections,
+                                       q.count, q.ids=NULL, q.names, r.selections,
                                        alpha = 0.05, output = "graph"){
   inc.mat <- likert_as_incidence_matrix(df)
   inc.mat <- check_incidence_matrix(inc.mat, a.count, d.count, n.count,
-                                    q.count, q.names, r.selections)
+                                    q.count, q.ids, r.selections)
   resp.adj.mat <- likert_as_resp_adj_mat(inc.mat)
   item.mats <- collapse_response_matrix(resp.adj.mat, a.count, d.count,
                                         n.count, q.count, q.names)
@@ -295,4 +346,60 @@ create_survey_item_network <- function(df, a.count, d.count, n.count,
   net <- generate_two_mode_weighted_network(item.bbs[[1]], item.bbs[[2]], output)
   
   return(net)
+}
+
+community_tests <- function(c.full, c.test){
+  m <- matrix(nrow = length(c.full), ncol = length(c.test))
+  for(i in 1:length(c.full)){
+    for(j in 1:length(c.test)){
+      m[i,j] <- length(intersect(c.full[[i]], c.test[[j]]))
+    }
+  }
+  mt <- t(m)
+  m <- rbind(m, colSums(m))
+  m <- cbind(m, rowSums(m))
+  maxs <- apply(m[1:nrow(m)-1, 1:ncol(m)-1], 1, max)
+  maxs <- c(maxs, sum(maxs))
+  m <- cbind(m, maxs)
+  
+  mt <- rbind(mt, colSums(mt))
+  mt <- cbind(mt, rowSums(mt))
+  maxs <- apply(mt[1:nrow(mt)-1, 1:ncol(mt)-1], 1, max)
+  maxs <- c(maxs, sum(maxs))
+  mt <- cbind(mt, maxs)
+  
+  #print(mt)
+  #print(mt)
+  
+  purityA <- m[nrow(m), ncol(m)] / m[nrow(m), ncol(m)-1]
+  purityB <- mt[nrow(mt), ncol(mt)] / mt[nrow(mt), ncol(mt)-1]
+  
+  purity <- unname((2 * purityA * purityB) / (purityA + purityB))
+  
+  #print(c(purityA, purityB, purity))
+  
+  g1 <- matrix(nrow = length(c.full), ncol = 3)
+  g2 <- matrix(nrow = length(c.test), ncol = 3)
+  
+  for(i in 1:nrow(g1)){
+    val <- ncol(m)-2
+    g1[i,1] <- m[i,ncol(m)] / m[i,ncol(m)-1]
+    col.num <- which(m[1:nrow(m)-1,1:val][i,] == max(m[1:nrow(m)-1,1:val][i,]), arr.ind=T)[1]
+    g1[i,2] <- m[i,ncol(m)] / m[nrow(m), col.num]
+    g1[i,3] <- (2 * g1[i,1] * g1[i,2]) / (g1[i,1] + g1[i,2])
+  }
+  
+  for(i in 1:nrow(g2)){
+    val <- ncol(mt)-2
+    g2[i,1] <- mt[i,ncol(mt)] / mt[i,ncol(mt)-1]
+    col.num <- which(mt[1:nrow(mt)-1,1:val][i,] == max(mt[1:nrow(mt)-1,1:val][i,]), arr.ind=T)[1]
+    g2[i,2] <- mt[i,ncol(mt)] / mt[nrow(mt), col.num]
+    g2[i,3] <- (2 * g2[i,1] * g2[i,2]) / (g2[i,1] + g2[i,2])
+  }
+  
+  FA <- mean(g1[,3])
+  FB <- mean(g2[,3])
+  Fnum <- (2 * FA * FB) / (FA + FB)
+  
+  return(c(purity, Fnum))
 }
